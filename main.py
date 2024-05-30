@@ -1,13 +1,30 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI
+import uvicorn
+
+from core.config import settings
+from core.models import Base, db_helper
+from api_v1 import router as router_v1
 from item_views import router as items_router
 from users.views import router as users_router
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Establish a connection to the database and create the necessary tables.
+    async with db_helper.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Return control to the main part of the application.
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(router=router_v1, prefix=settings.api_v1_prefix)
 app.include_router(items_router)
 app.include_router(users_router)
 
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+if __name__ == "__main__":
+    uvicorn.run("main:app", reload=True)
